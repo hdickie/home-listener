@@ -1,0 +1,5 @@
+﻿
+Thursday, March 12, 2020 7:52:01 PM
+
+
+Uptime: 4  Threads: 2  Questions: 2  Slow queries: 0  Opens: 115  Flush tables: 3  Open tables: 35  Queries per second avg: 0.500
