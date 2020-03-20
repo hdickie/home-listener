@@ -7,3 +7,5 @@ telnet localhost 3306 (this will also give status, bc database should be on port
 .\mysqladmin -u root -p shutdown (requires password)
 
 I put my password in C:/WINDOWS/my.cnf
+
+Let's set up some open source ETL! https://rmoff.net/2018/03/24/streaming-data-from-mysql-into-kafka-with-kafka-connect-and-debezium/
