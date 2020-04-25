@@ -11,11 +11,11 @@ This project is to help me manage all the data in my life with as much ease as p
 WIP
 
 ## Built with
-Linux Mint
-MySQL (database)
-R
-Python
-Apache Airflow (ETL)
+Linux Mint  
+MySQL (database)  
+R  
+Python  
+Apache Airflow (ETL)  
 
 ## Features
 Nothing works yet!
