@@ -11,13 +11,11 @@ This project is to help me manage all the data in my life with as much ease as p
 WIP
 
 ## Built with
-Windows 10
+Linux Mint
 MySQL (database)
 R
 Python
-Powershell
-(TODO) Apache Kafka (ETL)
-(TODO) Swift (iOS app)
+Apache Airflow (ETL)
 
 ## Features
 Nothing works yet!
@@ -65,17 +63,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-### Notes
-
-mysqld --initialize --console (outputs new temporary password)
-mysqld (will prompt you to reset password. didnt do this the second time tho. have to start with admin rights, does not require password input)
-
-.\mysqladmin -u root -p status (gives you status but it requires password input)
-telnet localhost 3306 (this will also give status, bc database should be on port 3306) (well, this did SOMETHING when the database was on. very confused by what though)
-
-.\mysqladmin -u root -p shutdown (requires password)
-
-I put my password in C:/WINDOWS/my.cnf
-
-Let's set up some open source ETL! https://rmoff.net/2018/03/24/streaming-data-from-mysql-into-kafka-with-kafka-connect-and-debezium/
