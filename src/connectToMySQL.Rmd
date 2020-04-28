@@ -1,0 +1,17 @@
+---
+title: "connectToMySQL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+require(magrittr)
+require(RMariaDB)
+```
+
+```{r b1}
+root.password <- 'badpassword'
+
+storiesDb <- dbConnect(RMariaDB::MariaDB(), user='root', password=root.password, dbname='firstdb', host='localhost')
+dbListTables(storiesDb)
+dbDisconnect(storiesDb)
+```

@@ -1,0 +1,558 @@
+---
+title: "bankStatementViz"
+author: "hdickie"
+date: "4/22/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(pdftools)
+library(ggplot2)
+library(magrittr)
+library(data.table)
+library(dplyr) #because aggregate doesnt work >:(
+```
+
+```{r load}
+setwd('C:/Users/HDickie/Documents/bank-statements/')
+file.names <- list.files()
+
+
+bank.statement.pdfs <- lapply(file.names,pdf_text) #ive added my loan statements too
+```
+
+just going for account summary details
+```{r process}
+
+raw.credit.payment.rows <- list()
+raw.credit.purchase.rows <- list()
+raw.credit.interest.rows <- list()
+
+raw.checking.transaction.rows <- list()
+
+raw.savings.transaction.rows <- list()
+
+for ( i in 1:length(file.names) ) {
+  f <- file.names[[i]]
+  year <- substring(f,1,4)
+  
+  credit.card.ind <- grepl("-9712-",f)
+  checking.ind <- grepl("-9551-",f)
+  savings.ind <- grepl("-0626-",f)
+  
+  if (sum(credit.card.ind,checking.ind,savings.ind) == 0) {
+    next
+  }
+  
+  curr.statement <- bank.statement.pdfs[[i]]
+  current.page <- strsplit(curr.statement[[1]],'\r\n') %>% unlist()
+  
+  if (credit.card.ind) {
+    #account summary on page 1
+    #itemized on 3 onward
+    
+    #things to extract
+    #points balance
+    previous.balance.raw <- current.page[grepl("Previous Balance",current.page)]
+    Payment.or.Credits.raw <- current.page[grepl("Payment, Credits",current.page)]
+    Purchases.raw <- current.page[grepl("Purchases",current.page)]
+    Cash.Advances.raw <- current.page[grepl("Cash Advances",current.page)]
+    Balance.Transfers.raw <- current.page[grepl("Balance Transfers",current.page)]
+    Fees.Charged.raw <- current.page[grepl("Fees Charged",current.page)]
+    Interest.Charged.raw <- current.page[grepl("Interest Charged",current.page)]
+    New.Balance.raw <- current.page[grepl("New Balance",current.page)]
+    open.and.close.dates.raw <- current.page[grepl("Opening/Closing Date",current.page)]
+    
+    open.date.string <- substring(open.and.close.dates.raw,nchar(open.and.close.dates.raw) - 18,nchar(open.and.close.dates.raw)-11)
+    close.date.string <- substring(open.and.close.dates.raw,nchar(open.and.close.dates.raw) - 7,nchar(open.and.close.dates.raw))
+    
+    open.date <- as.Date(open.date.string,format="%m/%d/%y") - 14 #not always true! so we gotta give some room
+    close.date <- as.Date(close.date.string,format="%m/%d/%y") + 14
+    
+    if (length(curr.statement) <= 2) {
+      #this is unexpected, but if it happens, just go to the next statement
+      next
+    }
+    
+    payment.rows <- list()
+    purchase.rows <- list()
+    interest.rows <- list()
+    
+    for (j in 3:length(curr.statement)) {
+      print(paste(i,j))
+      current.page <- strsplit(curr.statement[[j]],'\r\n') %>% unlist()
+      
+      for (k in 1:length(current.page)) {
+        line <- current.page[[k]]
+        print(paste(k,line))
+      }
+      
+      upper.bound.index <- which(grepl("Transaction",current.page) == TRUE) + 1
+      payment.begin.index <- which(grepl("PAYMENTS AND OTHER CREDITS",current.page) == TRUE) + 1
+      purchases.begin.index <- which(grepl("PURCHASE$",current.page) == TRUE) + 1
+      interest.charged.begin.index <- which(grepl("INTEREST CHARGED",current.page) == TRUE) + 1
+      lower.bound.index <- c(which(grepl("Page [0-9] of [0-9]",current.page) == TRUE) + 1,which(grepl("Totals Year-to-Date",current.page) == TRUE)) %>% min()
+      
+      if (length(upper.bound.index) == 0) {
+        #this page does not have transactions, so we can skip it
+        next
+      }
+      
+      #if all 3 found on same page
+      if (c(payment.begin.index,purchases.begin.index,interest.charged.begin.index) %>% length() == 3) {
+        payment.rows <- current.page[payment.begin.index:(purchases.begin.index-2)]
+        purchase.rows <- current.page[purchases.begin.index:(interest.charged.begin.index-2)]
+        interest.rows <- current.page[interest.charged.begin.index:(lower.bound.index-2)]
+      }
+      
+      #if only payment and purchase are found
+      if ((c(payment.begin.index,purchases.begin.index) %>% length() == 2) && (c(interest.charged.begin.index) %>% length() == 0)) {
+        payment.rows <- current.page[payment.begin.index:(purchases.begin.index-2)]
+        purchase.rows <- current.page[purchases.begin.index:(lower.bound.index-2)]
+      }
+      
+      #if only purchase and interest are found
+      if ((c(purchases.begin.index,interest.charged.begin.index) %>% length() == 2) && (c(payment.begin.index) %>% length() == 0)) {
+        purchase.rows <- current.page[purchases.begin.index:(interest.charged.begin.index-2)]
+        interest.rows <- current.page[interest.charged.begin.index:(lower.bound.index-2)]
+      }
+      
+      #if only payment is found
+      if ((c(payment.begin.index) %>% length() == 1) && (c(purchases.begin.index,interest.charged.begin.index) %>% length() == 0)) {
+        payment.rows <- current.page[payment.begin.index:(lower.bound.index-2)]
+      }
+      
+      #if only purchase is found
+      if ((c(purchases.begin.index) %>% length() == 1) && (c(payment.begin.index,interest.charged.begin.index) %>% length() == 0)) {
+        purchase.rows <- current.page[purchases.begin.index:(lower.bound.index-2)]
+      }
+      
+      #if only interest charged is found
+      if ((c(interest.charged.begin.index) %>% length() == 1) && (c(payment.begin.index,purchases.begin.index) %>% length() == 0)) {
+        purchase.rows <- current.page[upper.bound.index:(interest.charged.begin.index-2)]
+        interest.rows <- current.page[interest.charged.begin.index:(lower.bound.index-2)]
+      }
+      
+
+      
+      #add to global list if rows were found 
+      if (length(payment.rows) > 0){
+        
+        #infer the date for each row
+        payment.rows <- lapply(payment.rows,trimws) %>% unlist()
+        partial.dates <- substring(payment.rows,1,5)
+        
+        #add the current year and test if it is between the open and close date, if not, decrement the year by 1
+        partial.dates.w.statement.year <- paste(partial.dates,year,sep="/") %>% as.Date(format="%m/%d/%Y")
+        dates.within.statement.range <- open.date <= partial.dates.w.statement.year & partial.dates.w.statement.year <= close.date
+        partial.dates.w.statement.year[!dates.within.statement.range] <- partial.dates.w.statement.year[!dates.within.statement.range] - 365
+        
+        #confirm that the dates are now within the statement range
+        dates.within.statement.range.2 <- open.date <= partial.dates.w.statement.year[!dates.within.statement.range] & partial.dates.w.statement.year[!dates.within.statement.range] <= close.date
+        
+        #if this halts, then the script failed to guess the transaction date.
+        stopifnot(min(dates.within.statement.range.2)==1 | length(dates.within.statement.range.2) == 0)
+        
+        actual.dates <- partial.dates.w.statement.year
+        
+        #remove partial date from front of line and replace with actual date
+        payment.rows.2 <- substring(payment.rows,6,nchar(payment.rows))
+        payment.rows <- paste(actual.dates,payment.rows.2,sep="")
+        
+        raw.credit.payment.rows[[length(raw.credit.payment.rows) + 1]] <- payment.rows
+        payment.rows <- list()
+      }
+      if (length(purchase.rows) > 0){
+        
+        #infer the date for each row
+        purchase.rows <- lapply(purchase.rows,trimws) %>% unlist()
+        partial.dates <- substring(purchase.rows,1,5)
+        
+        #add the current year and test if it is between the open and close date, if not, decrement the year by 1
+        partial.dates.w.statement.year <- paste(partial.dates,year,sep="/") %>% as.Date(format="%m/%d/%Y")
+        dates.within.statement.range <- open.date <= partial.dates.w.statement.year & partial.dates.w.statement.year <= close.date
+        partial.dates.w.statement.year[!dates.within.statement.range] <- partial.dates.w.statement.year[!dates.within.statement.range] - 365
+        
+        #confirm that the dates are now within the statement range
+        dates.within.statement.range.2 <- open.date <= partial.dates.w.statement.year[!dates.within.statement.range] & partial.dates.w.statement.year[!dates.within.statement.range] <= close.date
+        
+        #if this halts, then the script failed to guess the transaction date.
+        stopifnot(min(dates.within.statement.range.2)==1 | length(dates.within.statement.range.2) == 0)
+        
+        actual.dates <- partial.dates.w.statement.year
+        
+        #remove partial date from front of line and replace with actual date
+        purchase.rows.2 <- substring(purchase.rows,6,nchar(purchase.rows))
+        purchase.rows <- paste(actual.dates,purchase.rows.2,sep="")
+        
+        
+        raw.credit.purchase.rows[[length(raw.credit.purchase.rows) + 1]] <- purchase.rows
+        purchase.rows <- list()
+      }
+      if (length(interest.rows) > 0){
+        
+        #infer the date for each row
+        interest.rows <- lapply(interest.rows,trimws) %>% unlist()
+        partial.dates <- substring(interest.rows,1,5)
+        
+        #add the current year and test if it is between the open and close date, if not, decrement the year by 1
+        partial.dates.w.statement.year <- paste(partial.dates,year,sep="/") %>% as.Date(format="%m/%d/%Y")
+        dates.within.statement.range <- open.date <= partial.dates.w.statement.year & partial.dates.w.statement.year <= close.date
+        partial.dates.w.statement.year[!dates.within.statement.range] <- partial.dates.w.statement.year[!dates.within.statement.range] - 365
+        
+        #confirm that the dates are now within the statement range
+        dates.within.statement.range.2 <- open.date <= partial.dates.w.statement.year[!dates.within.statement.range] & partial.dates.w.statement.year[!dates.within.statement.range] <= close.date
+        
+        #if this halts, then the script failed to guess the transaction date.
+        stopifnot(min(dates.within.statement.range.2)==1 | length(dates.within.statement.range.2) == 0)
+        
+        actual.dates <- partial.dates.w.statement.year
+        
+        #remove partial date from front of line and replace with actual date
+        interest.rows.2 <- substring(interest.rows,6,nchar(interest.rows))
+        interest.rows <- paste(actual.dates,interest.rows.2,sep="")
+        
+        raw.credit.interest.rows[[length(raw.credit.interest.rows) + 1]] <- interest.rows
+        interest.rows <- list()
+      }
+    }
+    
+  }
+  
+  if (checking.ind) {
+    
+    #determine open and close date
+    #wow they really gonna make me translate it from words. it really should be possibl with strptime but its not working so... yeah...
+    open.and.close.dates.as.words <- current.page[[1]] %>% strsplit("through") %>% unlist() %>% lapply(trimws) %>% unlist()
+    open.and.close.dates <- lapply(open.and.close.dates.as.words,function(d){
+      d.split <- strsplit(d,' ') %>% unlist()
+      month <- switch(d.split[[1]],
+        "January" = "01",
+        "February" = "02",
+        "March" = "03",
+        "April" = "04",
+        "May" = "05",
+        "June" = "06",
+        "July" = "07",
+        "August" = "08",
+        "September" = "09",
+        "October" = "10",
+        "November" = "11",
+        "December" = "12"
+      )
+      day <- substring(d.split[[2]],1,2)
+      stopifnot(nchar(d.split[[2]])==3) #if this breaks, it is because there are no leading 0s on single digit dates
+      year <- d.split[[3]]
+      return(paste(year,month,day,sep='-'))
+    }) %>% unlist()
+    
+    open.date <- as.Date(open.and.close.dates[[1]],format="%Y-%m-%d")
+    close.date <- as.Date(open.and.close.dates[[2]],format="%Y-%m-%d")
+    
+    beginning.balance.raw <- current.page[grepl("Beginning Balance",current.page)]
+    deposits.and.additions.raw <- current.page[grepl("Deposits and Additions",current.page)]
+    atm.and.debit.withdrawals.raw <- current.page[grepl("ATM & Debit Card Withdrawals",current.page)]
+    electronic.withdrawals.raw <- current.page[grepl("Electronic Withdrawals",current.page)]
+    ending.balance.raw <- current.page[grepl("Ending Balance",current.page)]
+    
+    #items also start on page 1
+    for (j in 1:length(curr.statement)) {
+      current.page <- strsplit(curr.statement[[j]],'\r\n') %>% unlist() #redundant for the first page but thats ok
+      
+      start.transactions.index <- which(lapply(current.page,grepl,pattern="start\\*transactiondetail") %>% unlist() == TRUE)
+      end.transactions.index <- which(lapply(current.page,grepl,pattern="end\\*transaction detail") %>% unlist() == TRUE) #confirming that "transaction detail" has a space here, whereas it does not in start
+      
+      if (length(start.transactions.index) == 0) {
+        next
+      }
+    
+      checking.transaction.rows <- current.page[(start.transactions.index+4):(end.transactions.index-1)]
+      
+      
+      #infer the date for each row
+      checking.transaction.rows <- lapply(checking.transaction.rows,trimws) %>% unlist()
+      
+      #if the line does not start with a date, then this line contains memo text from the previous line, which we will ignore
+      ignore.these.rows.sel <- substring(checking.transaction.rows,3,3) != "/"
+      checking.transaction.rows <- checking.transaction.rows[!ignore.these.rows.sel]
+      
+      partial.dates <- substring(checking.transaction.rows,1,5)
+      
+      #add the current year and test if it is between the open and close date, if not, decrement the year by 1
+      partial.dates.w.statement.year <- paste(partial.dates,year,sep="/") %>% as.Date(format="%m/%d/%Y")
+      dates.within.statement.range <- open.date <= partial.dates.w.statement.year & partial.dates.w.statement.year <= close.date
+      partial.dates.w.statement.year[!dates.within.statement.range] <- partial.dates.w.statement.year[!dates.within.statement.range] - 365
+      
+      #confirm that the dates are now within the statement range
+      dates.within.statement.range.2 <- open.date <= partial.dates.w.statement.year[!dates.within.statement.range] & partial.dates.w.statement.year[!dates.within.statement.range] <= close.date
+      
+      #if this halts, then the script failed to guess the transaction date.
+      stopifnot(min(dates.within.statement.range.2)==1 | length(dates.within.statement.range.2) == 0)
+      
+      actual.dates <- partial.dates.w.statement.year
+      
+      #remove partial date from front of line and replace with actual date
+      checking.transaction.rows.2 <- substring(checking.transaction.rows,6,nchar(checking.transaction.rows))
+      checking.transaction.rows <- paste(actual.dates,checking.transaction.rows.2,sep="")
+      
+      raw.checking.transaction.rows[[length(raw.checking.transaction.rows) + 1]] <- checking.transaction.rows
+      checking.transaction.rows <- list()
+    }
+    
+  }
+  
+  if (savings.ind) {
+    
+    #determine open and close date
+    #wow they really gonna make me translate it from words. it really should be possibl with strptime but its not working so... yeah...
+    open.and.close.dates.as.words <- current.page[[1]] %>% strsplit("through") %>% unlist() %>% lapply(trimws) %>% unlist()
+    open.and.close.dates <- lapply(open.and.close.dates.as.words,function(d){
+      d.split <- strsplit(d,' ') %>% unlist()
+      month <- switch(d.split[[1]],
+        "January" = "01",
+        "February" = "02",
+        "March" = "03",
+        "April" = "04",
+        "May" = "05",
+        "June" = "06",
+        "July" = "07",
+        "August" = "08",
+        "September" = "09",
+        "October" = "10",
+        "November" = "11",
+        "December" = "12"
+      )
+      day <- substring(d.split[[2]],1,2)
+      stopifnot(nchar(d.split[[2]])==3) #if this breaks, it is because there are no leading 0s on single digit dates
+      year <- d.split[[3]]
+      return(paste(year,month,day,sep='-'))
+    }) %>% unlist()
+    
+    open.date <- as.Date(open.and.close.dates[[1]],format="%Y-%m-%d")
+    close.date <- as.Date(open.and.close.dates[[2]],format="%Y-%m-%d")
+    
+    beginning.balance.raw <- current.page[grepl("Beginning Balance",current.page)]
+    deposits.and.additions.raw <- current.page[grepl("Deposits and Additions",current.page)]
+    electronic.withdrawals.raw <- current.page[grepl("Electronic Withdrawals",current.page)]
+    ending.balance.raw <- current.page[grepl("Ending Balance",current.page)]
+    apr.raw <- current.page[grepl("Annual Percentage Yield Earned This Period",current.page)]
+    interest.raw <- current.page[grepl("Interest Paid This Period",current.page)]
+    interest.ytd.raw <- current.page[grepl("Interest Paid Year-to-Date",current.page)]
+    
+    
+    
+    
+    
+    
+    #items also start on page 1
+    for (j in 1:length(curr.statement)) {
+      current.page <- strsplit(curr.statement[[j]],'\r\n') %>% unlist() #redundant for the first page but thats ok
+      
+      start.transactions.index <- which(lapply(current.page,grepl,pattern="start\\*transactiondetail") %>% unlist() == TRUE)
+      end.transactions.index <- which(lapply(current.page,grepl,pattern="end\\*transaction detail") %>% unlist() == TRUE) #confirming that "transaction detail" has a space here, whereas it does not in start
+      
+      if (length(start.transactions.index) == 0) {
+        next
+      }
+    
+      savings.transaction.rows <- current.page[(start.transactions.index+4):(end.transactions.index-1)]
+      
+      
+      #infer the date for each row
+      savings.transaction.rows <- lapply(savings.transaction.rows,trimws) %>% unlist()
+      
+      #if the line does not start with a date, then this line contains memo text from the previous line, which we will ignore
+      ignore.these.rows.sel <- substring(savings.transaction.rows,3,3) != "/"
+      savings.transaction.rows <- savings.transaction.rows[!ignore.these.rows.sel]
+      
+      partial.dates <- substring(savings.transaction.rows,1,5)
+      
+      #add the current year and test if it is between the open and close date, if not, decrement the year by 1
+      partial.dates.w.statement.year <- paste(partial.dates,year,sep="/") %>% as.Date(format="%m/%d/%Y")
+      dates.within.statement.range <- open.date <= partial.dates.w.statement.year & partial.dates.w.statement.year <= close.date
+      partial.dates.w.statement.year[!dates.within.statement.range] <- partial.dates.w.statement.year[!dates.within.statement.range] - 365
+      
+      #confirm that the dates are now within the statement range
+      dates.within.statement.range.2 <- open.date <= partial.dates.w.statement.year[!dates.within.statement.range] & partial.dates.w.statement.year[!dates.within.statement.range] <= close.date
+      
+      #if this halts, then the script failed to guess the transaction date.
+      stopifnot(min(dates.within.statement.range.2)==1 | length(dates.within.statement.range.2) == 0)
+      
+      actual.dates <- partial.dates.w.statement.year
+      
+      #remove partial date from front of line and replace with actual date
+      savings.transaction.rows.2 <- substring(savings.transaction.rows,6,nchar(savings.transaction.rows))
+      savings.transaction.rows <- paste(actual.dates,savings.transaction.rows.2,sep="")
+      
+      raw.savings.transaction.rows[[length(raw.savings.transaction.rows) + 1]] <- savings.transaction.rows
+      savings.transaction.rows <- list()
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+  }
+  
+}
+
+```
+
+```{r clean}
+raw.credit.payment.rows <- raw.credit.payment.rows %>% unlist()
+raw.credit.purchase.rows <- raw.credit.purchase.rows %>% unlist()
+raw.credit.interest.rows <- raw.credit.interest.rows %>% unlist()
+
+raw.checking.transaction.rows <- raw.checking.transaction.rows %>% unlist()
+raw.savings.transaction.rows <- raw.savings.transaction.rows %>% unlist()
+
+#super specific and non general function
+credit.statement.column.width.split <- function(line){
+  line <- line
+  part1 <- substring(line,1,10) %>% trimws()
+  part2 <- substring(line,11,nchar(line)-11) %>% trimws()
+  part3 <- substring(line,nchar(line)-10,nchar(line)) %>% trimws()
+  
+  #sometimes there are rows with just a date
+  if ((part1==part3) & (part2 == "")) {
+    return(c(NA,NA,NA))
+  } 
+  
+  return(c(part1,part2,part3))
+  
+}
+
+checking.and.savings.statement.column.width.split <- function(line){
+  line <- line
+  part1 <- substring(line,1,10) %>% trimws()
+  part2 <- substring(line,11,nchar(line)-35) %>% trimws()
+  part3 <- substring(line,nchar(line)-35,nchar(line)-11) %>% trimws()
+  part4 <- substring(line,nchar(line)-10,nchar(line)) %>% trimws()
+  
+  #sometimes there are rows with just a date
+  #if ((part1==part3) & (part2 == "")) {
+  #  return(c(NA,NA,NA))
+  #} 
+  
+  return(c(part1,part2,part3,part4))
+  
+}
+
+
+credit.payment.df <- credit.statement.column.width.split(raw.credit.payment.rows) %>% matrix(ncol=3) %>% as.data.frame(stringsAsFactors=FALSE)
+credit.purchase.df  <- credit.statement.column.width.split(raw.credit.purchase.rows) %>% matrix(ncol=3) %>% as.data.frame(stringsAsFactors=FALSE)
+credit.interest.df <- credit.statement.column.width.split(raw.credit.interest.rows) %>% matrix(ncol=3) %>% as.data.frame(stringsAsFactors=FALSE)
+
+
+
+checking.transaction.df  <- checking.and.savings.statement.column.width.split(raw.checking.transaction.rows) %>% matrix(ncol=4) %>% as.data.frame(stringsAsFactors=FALSE)
+savings.transaction.df <- checking.and.savings.statement.column.width.split(raw.savings.transaction.rows) %>% matrix(ncol=4) %>% as.data.frame(stringsAsFactors=FALSE)
+
+credit.payment.df$source <- "CREDIT_PAYMENT"
+credit.purchase.df$source <- "CREDIT_PURCHASE"
+credit.interest.df$source <- "CREDIT_INTEREST"
+checking.transaction.df$source <- "CHECKING"
+savings.transaction.df$source <- "SAVINGS"
+
+credit.df <- rbind(credit.payment.df,credit.purchase.df,credit.interest.df)
+credit.df$V4 <- rep(0,nrow(credit.df))
+
+combined.df <- rbind(credit.df,checking.transaction.df,savings.transaction.df)
+names(combined.df) <- c("Date","Memo","Amount","source","New Balance")
+
+#remove garbage rows. if memo and account are empty
+combined.df <- combined.df[!(combined.df$Amount == "" & combined.df$Memo == ""),]
+
+combined.df$Date <- as.Date(combined.df$Date,format="%Y-%m-%d")
+combined.df$Amount <- gsub("[,+]","",combined.df$Amount) 
+combined.df$Amount <- as.numeric(combined.df$Amount)
+
+
+combined.df$Account <- lapply(combined.df$source,function(x){return(switch(x,"CREDIT_PAYMENT"="CREDIT","CREDIT_PURCHASE"="CREDIT","CREDIT_INTEREST"="CREDIT","CHECKING"="CHECKING","SAVINGS"="SAVINGS"))}) %>% unlist()
+
+combined.df <- combined.df[order(combined.df$Date),]
+row.names(combined.df) <- NULL
+
+#add initial conditions
+#savings =	5,025.20
+#credit = -2852.79
+#checking = 394.69
+combined.df[combined.df$Account=="CREDIT","Amount"] <- -1 * combined.df[combined.df$Account=="CREDIT","Amount"]
+
+initial.conditions.check <- list(Date="2019-12-10" %>% as.Date(format="%Y-%m-%d"),Memo="Initial Conditions",Amount=394.69,source="CHECKING","New Balance"=394.69,Account="CHECKING")
+initial.conditions.credit <- list(Date="2019-12-10" %>% as.Date(format="%Y-%m-%d"),Memo="Initial Conditions",Amount=-2852.79,source="CREDIT_PURCHASE","New Balance"=0,Account="CREDIT")
+initial.conditions.save <- list(Date="2019-12-10" %>% as.Date(format="%Y-%m-%d"),Memo="Initial Conditions",Amount=5025.20,source="SAVINGS","New Balance"=5025.20,Account="SAVINGS")
+
+initial.conditions.df <- rbindlist(list(initial.conditions.check,initial.conditions.credit,initial.conditions.save),fill=FALSE)
+combined.df <- rbind(initial.conditions.df,combined.df)
+
+#this isn't right because its not aggregated by day
+combined.df[combined.df$Account=="CHECKING","account_cmsm"] <- cumsum(combined.df[combined.df$Account=="CHECKING","Amount"])
+combined.df[combined.df$Account=="CREDIT","account_cmsm"] <- cumsum(combined.df[combined.df$Account=="CREDIT","Amount"])
+combined.df[combined.df$Account=="SAVINGS","account_cmsm"] <- cumsum(combined.df[combined.df$Account=="SAVINGS","Amount"])
+
+combined.df$net_worth <- cumsum(combined.df$Amount)
+```
+
+```{r drop_memo_and_aggregate}
+combined.df.selected.columns <- combined.df[,c("Date","Amount","Account")]
+
+combined.agg <- combined.df.selected.columns %>% group_by(Date,Account) %>% summarise(Amount=sum(Amount))
+
+#add no activity days so we dotn get diagonal lines
+for (d in seq(min(combined.agg$Date),max(combined.agg$Date),by=1) %>% as.character()) {
+  current.day <- combined.agg[combined.agg$Date==d,]
+  
+  if (nrow(current.day)==3) {
+    #do nothing
+  } else {
+    credit.row.index <- which(current.day$Account == "CREDIT")
+    checking.row.index <- which(current.day$Account == "CHECKING")
+    savings.row.index <- which(current.day$Account == "SAVINGS")
+    
+    if (length(credit.row.index)!=1){
+      prev.credit.row.index <- which(prev.day$Account == "CHECKING")
+      prev.credit.row <- prev.day[prev.credit.row.index,]
+      
+      new.row <- list("Date"=d %>% as.Date(format="%Y-%m-%d"),Account="CREDIT",Amount=0) %>% as.data.frame(stringsAsFactors=FALSE)
+      
+      combined.agg <- rbindlist(list(new.row,combined.agg))
+    }
+    
+    if (length(checking.row.index)!=1){
+      prev.checking.row.index <- which(prev.day$Account == "CHECKING")
+      prev.checking.row <- prev.day[prev.checking.row.index,]
+      
+      new.row <- list("Date"=d %>% as.Date(format="%Y-%m-%d"),Account="CHECKING",Amount=0) %>% as.data.frame(stringsAsFactors=FALSE)
+      combined.agg <- rbindlist(list(new.row,combined.agg))
+    }
+    
+    if (length(savings.row.index)!=1){
+      prev.savings.row.index <- which(prev.day$Account == "SAVINGS")
+      prev.savings.row <- prev.day[prev.savings.row.index,]
+      
+      new.row <- list("Date"=d %>% as.Date(format="%Y-%m-%d"),Account="SAVINGS",Amount=0) %>% as.data.frame(stringsAsFactors=FALSE)
+      combined.agg <- rbindlist(list(new.row,combined.agg))
+    }
+  }
+  
+  prev.day <- current.day
+}
+
+combined.agg <- combined.agg[order(combined.agg$Date),]
+row.names(combined.agg) <- NULL
+
+combined.agg[combined.agg$Account=="CHECKING","account_cmsm"] <- cumsum(combined.agg[combined.agg$Account=="CHECKING","Amount"])
+combined.agg[combined.agg$Account=="CREDIT","account_cmsm"] <- cumsum(combined.agg[combined.agg$Account=="CREDIT","Amount"])
+combined.agg[combined.agg$Account=="SAVINGS","account_cmsm"] <- cumsum(combined.agg[combined.agg$Account=="SAVINGS","Amount"])
+
+combined.agg$net_worth <- cumsum(combined.agg$Amount)
+```
+
+```{r viz}
+ggplot(combined.agg,aes(x=Date)) + geom_line(aes(color=Account,y=account_cmsm)) + geom_line(aes(y=net_worth))
+```

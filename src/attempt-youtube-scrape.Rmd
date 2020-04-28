@@ -1,0 +1,11 @@
+---
+title: "attempt-youtube-scrape"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+require(rvest)
+require(magrittr)
+```
+
+Fucking stunned how easy that was...
