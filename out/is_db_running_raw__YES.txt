@@ -1,0 +1,12 @@
+● mysql.service - MySQL Community Server
+   Loaded: loaded (/lib/systemd/system/mysql.service; enabled; vendor preset: enabled)
+   Active: active (running) since Sat 2020-04-25 01:56:49 PDT; 8min ago
+  Process: 1156 ExecStart=/usr/sbin/mysqld --daemonize --pid-file=/run/mysqld/mysqld.pid (code=exited, status=0/SUCCESS)
+  Process: 1030 ExecStartPre=/usr/share/mysql/mysql-systemd-start pre (code=exited, status=0/SUCCESS)
+ Main PID: 1158 (mysqld)
+    Tasks: 27 (limit: 4915)
+   CGroup: /system.slice/mysql.service
+           └─1158 /usr/sbin/mysqld --daemonize --pid-file=/run/mysqld/mysqld.pid
+
+Apr 25 01:56:36 hdickie-Aspire-VN7-591G systemd[1]: Starting MySQL Community Server...
+Apr 25 01:56:49 hdickie-Aspire-VN7-591G systemd[1]: Started MySQL Community Server.

@@ -14,7 +14,7 @@ library(dplyr) #because aggregate doesnt work >:(
 ```
 
 ```{r load}
-setwd('C:/Users/HDickie/Documents/bank-statements/')
+setwd('~/Desktop/database-and-airflow-stuff/data/')
 file.names <- list.files()
 
 
@@ -29,23 +29,159 @@ raw.credit.purchase.rows <- list()
 raw.credit.interest.rows <- list()
 
 raw.checking.transaction.rows <- list()
-
 raw.savings.transaction.rows <- list()
+
+raw.loan.rows <- list()
 
 for ( i in 1:length(file.names) ) {
   f <- file.names[[i]]
-  year <- substring(f,1,4)
+  year <- substring(f,1,4) #if a bank statement
   
   credit.card.ind <- grepl("-9712-",f)
   checking.ind <- grepl("-9551-",f)
   savings.ind <- grepl("-0626-",f)
   
-  if (sum(credit.card.ind,checking.ind,savings.ind) == 0) {
-    next
-  }
-  
   curr.statement <- bank.statement.pdfs[[i]]
-  current.page <- strsplit(curr.statement[[1]],'\r\n') %>% unlist()
+  current.page <- strsplit(curr.statement[[1]],'\n') %>% unlist()
+  
+  loan.statement.ind <- ( substring(current.page[[1]],1,16) == "Direct_Statement")
+  
+   if (sum(credit.card.ind,checking.ind,savings.ind,loan.statement.ind) == 0) {
+    next
+   }
+  
+  if (loan.statement.ind){
+    
+    student.loan.interest.received.by.lender.raw <- current.page[grepl("Student loan interest received by lender",current.page)]
+    statement.date.raw  <- current.page[grepl("Statement Date",current.page)]
+    
+    current.balance.raw <- current.page[grepl("Current Balance",current.page)]
+    last.payment.raw <- current.page[grepl("Last Payment",current.page)]
+    
+    regular.monthly.payment.amount.raw <- current.page[grepl("Regular Monthly Payment Amount",current.page)]
+    amount.already.paid.for.this.month.raw <- current.page[grepl("Amount Already Paid for This Month",current.page)]
+    past.due.amount.raw <- current.page[grepl("Past Due Amount",current.page)]
+    current.amoount.due.raw <- current.page[grepl("Current Amount Due",current.page)]
+    
+    current.statement.due.date.raw <- current.page[grepl("Current Statement Due Date",current.page)]
+    current.amount.due.raw <- current.page[grepl("Current Amount Due",current.page)]
+    
+    #next page
+    current.page <- strsplit(curr.statement[[2]],'\n') %>% unlist()
+    
+    current.page.relevant.lines <- strsplit(current.page[1:24],'\t') %>% unlist()
+    
+    
+    original.principal.amount.raw <- current.page.relevant.lines[[4]]
+    indices.4 <-gregexpr("Original Principal Amount",original.principal.amount.raw) %>% unlist()
+    original.principal.amount.string <- substring(original.principal.amount.raw,indices.4+25,indices.4+35)[2:6]
+    
+    interest.rate.raw <- current.page.relevant.lines[[6]]
+    indices.6 <-gregexpr("Interest Rate",interest.rate.raw) %>% unlist()
+    interest.rate.string <- substring(interest.rate.raw,indices.6+17,indices.6+27)[2:6]
+    
+    daily.interest.raw <- current.page.relevant.lines[[7]]
+    indices.7 <- gregexpr("Daily Interest",daily.interest.raw) %>% unlist()
+    daily.interest.string <- substring(daily.interest.raw,indices.7+19,indices.7+27)[2:6]
+    
+    estimated.interest.raw <- current.page.relevant.lines[[8]]
+    indices.8 <- gregexpr("\\$",estimated.interest.raw) %>% unlist()
+    estimated.interest.string <- substring(estimated.interest.raw,indices.8,indices.8+10)
+    
+    regular.monthly.payment.amount.raw <- current.page.relevant.lines[[9]]
+    indices.9 <- gregexpr("\\$",regular.monthly.payment.amount.raw) %>% unlist()
+    regular.monthly.payment.amount.string <- substring(regular.monthly.payment.amount.raw,indices.9,indices.9+10)
+    
+    outstanding.principal.balance.raw <- current.page.relevant.lines[[10]]
+    indices.10 <- gregexpr("\\$",outstanding.principal.balance.raw) %>% unlist()
+    outstanding.principal.balance.string <- substring(outstanding.principal.balance.raw,indices.10,indices.10+10)
+    
+    estimated.payoff.raw <- current.page.relevant.lines[[11]]
+    indices.10 <- gregexpr("\\$",estimated.payoff.raw) %>% unlist()
+    estimated.payoff.string <- substring(estimated.payoff.raw,indices.10,indices.10+10)
+    
+    principal.paid.through.date.raw <- current.page.relevant.lines[[14]]
+    indices.14 <- gregexpr("\\$",principal.paid.through.date.raw) %>% unlist()
+    principal.paid.through.date.string <- substring(principal.paid.through.date.raw,indices.14,indices.14+10)
+    
+    interest.paid.through.raw <- current.page.relevant.lines[[15]]
+    indices.15 <- gregexpr("\\$",interest.paid.through.raw) %>% unlist()
+    interest.paid.through.string <- substring(interest.paid.through.raw,indices.15,indices.15+10)
+    
+    amount.paid.through.date.raw <- current.page.relevant.lines[[16]]
+    indices.16 <- gregexpr("\\$",amount.paid.through.date.raw) %>% unlist()
+    amount.paid.through.date.string <- substring(amount.paid.through.date.raw,indices.16,indices.16+10)
+    
+    total.paid.since.last.statement.raw <- current.page.relevant.lines[[17]]
+    indices.17 <- gregexpr("\\$",total.paid.since.last.statement.raw) %>% unlist()
+    total.paid.since.last.statement.string <- substring(total.paid.since.last.statement.raw,indices.17,indices.17+10)
+    
+    applied.to.interest.raw <- current.page.relevant.lines[[18]]
+    indices.18 <- gregexpr("\\$",applied.to.interest.raw) %>% unlist()
+    applied.to.interest.string <- substring(applied.to.interest.raw,indices.18,indices.18+10)
+    
+    applied.to.principal.raw <- current.page.relevant.lines[[19]]
+    indices.19 <- gregexpr("\\$",applied.to.principal.raw) %>% unlist()
+    applied.to.principal.string <- substring(applied.to.principal.raw,indices.19,indices.19+10)
+    
+    past.due.amount.raw <- current.page.relevant.lines[[22]]
+    indices.22 <- gregexpr("\\$",past.due.amount.raw) %>% unlist()
+    past.due.amount.string <- substring(past.due.amount.raw,indices.22,indices.22+10)
+    
+    amount.due.raw <- current.page.relevant.lines[[23]]
+    indices.23 <- gregexpr("\\$",amount.due.raw) %>% unlist()
+    amount.due.string <- substring(amount.due.raw,indices.23,indices.23+10)
+    
+    
+    
+    #just the values I care about right now
+    last.payment.date.value.index <- gregexpr("Effective",last.payment.raw) %>% unlist()
+    last.payment.date.value.string <- substring(last.payment.raw,last.payment.date.value.index+6,last.payment.date.value.index+22) %>% trimws()
+    last.payment.date.value.not.clean <- unlist(strsplit(last.payment.date.value.string,' '))[[2]]
+    last.payment.date.value <- substring(last.payment.date.value.not.clean,1,nchar(last.payment.date.value.not.clean)-1) %>% as.Date(format="%m/%d/%Y") %>% as.character()
+      
+    original.principal.amount.values <- gsub("[,\\$]","",original.principal.amount.string) %>% trimws()
+    interest.rate.values <- gsub("[,\\$]","",interest.rate.string) %>% trimws()
+    daily.interest.values <- gsub("[,\\$]","",daily.interest.string) %>% trimws()
+    estimated.interest.values <- gsub("[,\\$]","",estimated.interest.string) %>% trimws()
+    regular.monthly.payment.amount.values <- gsub("[,\\$]","",regular.monthly.payment.amount.string) %>% trimws()
+    outstanding.principal.balance.values <- gsub("[,\\$]","",outstanding.principal.balance.string) %>% trimws()
+    estimated.payoff.values <- gsub("[,\\$]","",estimated.payoff.string) %>% trimws()
+    
+    applied.to.interest.values <- gsub("[,\\$]","",applied.to.interest.string) %>% trimws() %>% as.numeric()
+    applied.to.principal.values <- gsub("[,\\$]","",applied.to.principal.string) %>% trimws() %>% as.numeric()
+    
+    #original amount
+    #interest rate
+    #daily interest
+    #estimated interest
+    #regular monthly payment amount
+    #outstanding principal balance
+    #estimated payoff
+    
+    #each row creates 10 new records: interest and payments are separate
+    loan.a.new.record.interest <- list(Date=last.payment.date.value,Memo="Loan A Interest",Amount=estimated.interest.values[[1]],Source="LOAN","New Balance"=NA,"LOAN A") #made interest NA just to avoid ambiguity downstream
+    loan.a.new.record.payment <- list(Date=last.payment.date.value,Memo="Loan A Payment",Amount=applied.to.interest.values[[1]]+applied.to.principal.values[[1]],Source="LOAN","New Balance"=outstanding.principal.balance.values[[1]],"LOAN A")
+    
+    loan.b.new.record.interest <- list(Date=last.payment.date.value,Memo="Loan B Interest",Amount=estimated.interest.values[[2]],Source="LOAN","New Balance"=NA,"LOAN B") #made interest NA just to avoid ambiguity downstream
+    loan.b.new.record.payment <- list(Date=last.payment.date.value,Memo="Loan B Payment",Amount=applied.to.interest.values[[2]]+applied.to.principal.values[[2]],Source="LOAN","New Balance"=outstanding.principal.balance.values[[2]],"LOAN B")
+    
+    loan.c.new.record.interest <- list(Date=last.payment.date.value,Memo="Loan C Interest",Amount=estimated.interest.values[[3]],Source="LOAN","New Balance"=NA,"LOAN C") #made interest NA just to avoid ambiguity downstream
+    loan.c.new.record.payment <- list(Date=last.payment.date.value,Memo="Loan C Payment",Amount=applied.to.interest.values[[3]]+applied.to.principal.values[[3]],Source="LOAN","New Balance"=outstanding.principal.balance.values[[3]],"LOAN C")
+    
+    loan.d.new.record.interest <- list(Date=last.payment.date.value,Memo="Loan D Interest",Amount=estimated.interest.values[[4]],Source="LOAN","New Balance"=NA,"LOAN D") #made interest NA just to avoid ambiguity downstream
+    loan.d.new.record.payment <- list(Date=last.payment.date.value,Memo="Loan D Payment",Amount=applied.to.interest.values[[4]]+applied.to.principal.values[[4]],Source="LOAN","New Balance"=outstanding.principal.balance.values[[4]],"LOAN D")
+    
+    loan.e.new.record.interest <- list(Date=last.payment.date.value,Memo="Loan E Interest",Amount=estimated.interest.values[[5]],Source="LOAN","New Balance"=NA,"LOAN E") #made interest NA just to avoid ambiguity downstream
+    loan.e.new.record.payment <- list(Date=last.payment.date.value,Memo="Loan E Payment",Amount=applied.to.interest.values[[5]]+applied.to.principal.values[[5]],Source="LOAN","New Balance"=outstanding.principal.balance.values[[5]],"LOAN E")
+    
+    
+    loan.statement.records <- rbind(loan.a.new.record.interest,loan.a.new.record.payment,loan.b.new.record.interest,loan.b.new.record.payment,loan.c.new.record.interest,loan.c.new.record.payment,loan.d.new.record.interest,loan.d.new.record.payment,loan.e.new.record.interest,loan.e.new.record.payment)
+    
+    #Date, Memo, Amount, Source, New Balance, Account
+    raw.loan.rows[[length(raw.loan.rows) + 1]] <- loan.statement.records
+    
+  }
   
   if (credit.card.ind) {
     #account summary on page 1
@@ -80,7 +216,7 @@ for ( i in 1:length(file.names) ) {
     
     for (j in 3:length(curr.statement)) {
       print(paste(i,j))
-      current.page <- strsplit(curr.statement[[j]],'\r\n') %>% unlist()
+      current.page <- strsplit(curr.statement[[j]],'\n') %>% unlist()
       
       for (k in 1:length(current.page)) {
         line <- current.page[[k]]
@@ -257,7 +393,7 @@ for ( i in 1:length(file.names) ) {
     
     #items also start on page 1
     for (j in 1:length(curr.statement)) {
-      current.page <- strsplit(curr.statement[[j]],'\r\n') %>% unlist() #redundant for the first page but thats ok
+      current.page <- strsplit(curr.statement[[j]],'\n') %>% unlist() #redundant for the first page but thats ok
       
       start.transactions.index <- which(lapply(current.page,grepl,pattern="start\\*transactiondetail") %>% unlist() == TRUE)
       end.transactions.index <- which(lapply(current.page,grepl,pattern="end\\*transaction detail") %>% unlist() == TRUE) #confirming that "transaction detail" has a space here, whereas it does not in start
@@ -346,7 +482,7 @@ for ( i in 1:length(file.names) ) {
     
     #items also start on page 1
     for (j in 1:length(curr.statement)) {
-      current.page <- strsplit(curr.statement[[j]],'\r\n') %>% unlist() #redundant for the first page but thats ok
+      current.page <- strsplit(curr.statement[[j]],'\n') %>% unlist() #redundant for the first page but thats ok
       
       start.transactions.index <- which(lapply(current.page,grepl,pattern="start\\*transactiondetail") %>% unlist() == TRUE)
       end.transactions.index <- which(lapply(current.page,grepl,pattern="end\\*transaction detail") %>% unlist() == TRUE) #confirming that "transaction detail" has a space here, whereas it does not in start
@@ -474,6 +610,23 @@ combined.df$Amount <- as.numeric(combined.df$Amount)
 
 combined.df$Account <- lapply(combined.df$source,function(x){return(switch(x,"CREDIT_PAYMENT"="CREDIT","CREDIT_PURCHASE"="CREDIT","CREDIT_INTEREST"="CREDIT","CHECKING"="CHECKING","SAVINGS"="SAVINGS"))}) %>% unlist()
 
+#bring in loan stuff
+loan.matrices <- lapply(raw.loan.rows,function(df){ return( matrix(df,ncol=6) ) })
+loan.df <- loan.matrices[[1]]
+for( i in 1:length(loan.matrices)) {
+  loan.df <- rbind(loan.df,loan.matrices[[i]])
+}
+
+loan.df <- apply(loan.df,2,unlist)
+loan.df <- as.data.frame(loan.df,stringsAsFactors=FALSE)
+names(loan.df) <- names(combined.df)
+
+loan.df$Date <- as.Date(loan.df$Date)
+loan.df$Amount <- as.numeric(loan.df$Amount)
+loan.df[,"New Balance"] <- as.numeric(loan.df[,"New Balance"] )
+
+combined.df <- rbind(combined.df,loan.df)
+
 combined.df <- combined.df[order(combined.df$Date),]
 row.names(combined.df) <- NULL
 
@@ -483,17 +636,29 @@ row.names(combined.df) <- NULL
 #checking = 394.69
 combined.df[combined.df$Account=="CREDIT","Amount"] <- -1 * combined.df[combined.df$Account=="CREDIT","Amount"]
 
+initial.conditions.loan.a <- list(Date="2019-12-13" %>% as.Date(format="%Y-%m-%d"),Memo="Initial Conditions",Amount=-5698.76,source="LOAN","New Balance"=NA,Account="LOAN A")
+initial.conditions.loan.b <- list(Date="2019-12-13" %>% as.Date(format="%Y-%m-%d"),Memo="Initial Conditions",Amount=-4864.15,source="LOAN","New Balance"=NA,Account="LOAN B")
+initial.conditions.loan.c <- list(Date="2019-12-13" %>% as.Date(format="%Y-%m-%d"),Memo="Initial Conditions",Amount=-1967.27,source="LOAN","New Balance"=NA,Account="LOAN C")
+initial.conditions.loan.d <- list(Date="2019-12-13" %>% as.Date(format="%Y-%m-%d"),Memo="Initial Conditions",Amount=-4847.23,source="LOAN","New Balance"=NA,Account="LOAN D")
+initial.conditions.loan.e <- list(Date="2019-12-13" %>% as.Date(format="%Y-%m-%d"),Memo="Initial Conditions",Amount=-1869.83,source="LOAN","New Balance"=NA,Account="LOAN E")
+
 initial.conditions.check <- list(Date="2019-12-10" %>% as.Date(format="%Y-%m-%d"),Memo="Initial Conditions",Amount=394.69,source="CHECKING","New Balance"=394.69,Account="CHECKING")
 initial.conditions.credit <- list(Date="2019-12-10" %>% as.Date(format="%Y-%m-%d"),Memo="Initial Conditions",Amount=-2852.79,source="CREDIT_PURCHASE","New Balance"=0,Account="CREDIT")
 initial.conditions.save <- list(Date="2019-12-10" %>% as.Date(format="%Y-%m-%d"),Memo="Initial Conditions",Amount=5025.20,source="SAVINGS","New Balance"=5025.20,Account="SAVINGS")
 
-initial.conditions.df <- rbindlist(list(initial.conditions.check,initial.conditions.credit,initial.conditions.save),fill=FALSE)
+initial.conditions.df <- rbindlist(list(initial.conditions.loan.a,initial.conditions.loan.b,initial.conditions.loan.c,initial.conditions.loan.d,initial.conditions.loan.e,initial.conditions.check,initial.conditions.credit,initial.conditions.save),fill=FALSE)
 combined.df <- rbind(initial.conditions.df,combined.df)
 
 #this isn't right because its not aggregated by day
 combined.df[combined.df$Account=="CHECKING","account_cmsm"] <- cumsum(combined.df[combined.df$Account=="CHECKING","Amount"])
 combined.df[combined.df$Account=="CREDIT","account_cmsm"] <- cumsum(combined.df[combined.df$Account=="CREDIT","Amount"])
 combined.df[combined.df$Account=="SAVINGS","account_cmsm"] <- cumsum(combined.df[combined.df$Account=="SAVINGS","Amount"])
+
+combined.df[combined.df$Account=="LOAN A","account_cmsm"] <- cumsum(combined.df[combined.df$Account=="LOAN A","Amount"])
+combined.df[combined.df$Account=="LOAN B","account_cmsm"] <- cumsum(combined.df[combined.df$Account=="LOAN B","Amount"])
+combined.df[combined.df$Account=="LOAN C","account_cmsm"] <- cumsum(combined.df[combined.df$Account=="LOAN C","Amount"])
+combined.df[combined.df$Account=="LOAN D","account_cmsm"] <- cumsum(combined.df[combined.df$Account=="LOAN D","Amount"])
+combined.df[combined.df$Account=="LOAN E","account_cmsm"] <- cumsum(combined.df[combined.df$Account=="LOAN E","Amount"])
 
 combined.df$net_worth <- cumsum(combined.df$Amount)
 ```
@@ -504,43 +669,77 @@ combined.df.selected.columns <- combined.df[,c("Date","Amount","Account")]
 combined.agg <- combined.df.selected.columns %>% group_by(Date,Account) %>% summarise(Amount=sum(Amount))
 
 #add no activity days so we dotn get diagonal lines
+checking.sighted <- FALSE
+savings.sighted <- FALSE
+credit.sighted <- FALSE
+loan.sighted <- FALSE
+
+iterate.array <- seq(min(combined.agg$Date),max(combined.agg$Date),by=1) %>% as.character()
 for (d in seq(min(combined.agg$Date),max(combined.agg$Date),by=1) %>% as.character()) {
   current.day <- combined.agg[combined.agg$Date==d,]
   
-  if (nrow(current.day)==3) {
-    #do nothing
-  } else {
-    credit.row.index <- which(current.day$Account == "CREDIT")
+  checking.ind <- grepl("CHECKING",current.day$Account) %>% sum() > 0
+  savings.ind <- grepl("SAVINGS",current.day$Account) %>% sum() > 0
+  credit.ind <- grepl("CREDIT",current.day$Account) %>% sum() > 0
+  loan.ind <- grepl("LOAN",current.day$Account) %>% sum() > 0
+  
+  if (!checking.ind & checking.sighted) {
     checking.row.index <- which(current.day$Account == "CHECKING")
-    savings.row.index <- which(current.day$Account == "SAVINGS")
     
-    if (length(credit.row.index)!=1){
-      prev.credit.row.index <- which(prev.day$Account == "CHECKING")
-      prev.credit.row <- prev.day[prev.credit.row.index,]
-      
-      new.row <- list("Date"=d %>% as.Date(format="%Y-%m-%d"),Account="CREDIT",Amount=0) %>% as.data.frame(stringsAsFactors=FALSE)
-      
-      combined.agg <- rbindlist(list(new.row,combined.agg))
-    }
+    prev.checking.row.index <- which(prev.day$Account == "CHECKING")
+    prev.checking.row <- prev.day[prev.checking.row.index,]
     
-    if (length(checking.row.index)!=1){
-      prev.checking.row.index <- which(prev.day$Account == "CHECKING")
-      prev.checking.row <- prev.day[prev.checking.row.index,]
-      
-      new.row <- list("Date"=d %>% as.Date(format="%Y-%m-%d"),Account="CHECKING",Amount=0) %>% as.data.frame(stringsAsFactors=FALSE)
-      combined.agg <- rbindlist(list(new.row,combined.agg))
-    }
-    
-    if (length(savings.row.index)!=1){
-      prev.savings.row.index <- which(prev.day$Account == "SAVINGS")
-      prev.savings.row <- prev.day[prev.savings.row.index,]
-      
-      new.row <- list("Date"=d %>% as.Date(format="%Y-%m-%d"),Account="SAVINGS",Amount=0) %>% as.data.frame(stringsAsFactors=FALSE)
-      combined.agg <- rbindlist(list(new.row,combined.agg))
-    }
+    new.row <- list("Date"=d %>% as.Date(format="%Y-%m-%d"),Account="CHECKING",Amount=0) %>% as.data.frame(stringsAsFactors=FALSE)
+    combined.agg <- rbindlist(list(new.row,combined.agg))
   }
   
+  if (!savings.ind & savings.sighted) {
+    savings.row.index <- which(current.day$Account == "SAVINGS")
+    
+    prev.savings.row.index <- which(prev.day$Account == "SAVINGS")
+    prev.savings.row <- prev.day[prev.savings.row.index,]
+    
+    new.row <- list("Date"=d %>% as.Date(format="%Y-%m-%d"),Account="SAVINGS",Amount=0) %>% as.data.frame(stringsAsFactors=FALSE)
+    combined.agg <- rbindlist(list(new.row,combined.agg))
+  }
+  
+  if (!credit.ind & credit.sighted) {
+    credit.row.index <- which(current.day$Account == "CREDIT")
+    
+    prev.credit.row.index <- which(prev.day$Account == "CREDIT")
+    prev.credit.row <- prev.day[prev.credit.row.index,]
+    
+    new.row <- list("Date"=d %>% as.Date(format="%Y-%m-%d"),Account="CREDIT",Amount=0) %>% as.data.frame(stringsAsFactors=FALSE)
+    
+    combined.agg <- rbindlist(list(new.row,combined.agg))
+  }
+    
+  if (!loan.ind & loan.sighted){
+    prev.loan.row.indices <- which(grepl("LOAN",prev.day$Account) )
+    prev.loan.rows <- prev.day[prev.loan.row.indices,]
+    
+    new.row <- list("Date"=d %>% as.Date(format="%Y-%m-%d"),Account=prev.day$Account,Amount=0) %>% as.data.frame(stringsAsFactors=FALSE)
+    combined.agg <- rbindlist(list(new.row,combined.agg))
+  }
+
+  current.day <- combined.agg[combined.agg$Date==d,]
   prev.day <- current.day
+  
+  if (checking.ind) {
+    checking.sighted <- TRUE
+  }
+  
+  if (savings.ind) {
+    savings.sighted <- TRUE
+  }
+  
+  if (credit.ind) {
+    credit.sighted <- TRUE
+  }
+  
+  if (loan.ind) {
+    loan.sighted <- TRUE
+  }
 }
 
 combined.agg <- combined.agg[order(combined.agg$Date),]
@@ -549,10 +748,427 @@ row.names(combined.agg) <- NULL
 combined.agg[combined.agg$Account=="CHECKING","account_cmsm"] <- cumsum(combined.agg[combined.agg$Account=="CHECKING","Amount"])
 combined.agg[combined.agg$Account=="CREDIT","account_cmsm"] <- cumsum(combined.agg[combined.agg$Account=="CREDIT","Amount"])
 combined.agg[combined.agg$Account=="SAVINGS","account_cmsm"] <- cumsum(combined.agg[combined.agg$Account=="SAVINGS","Amount"])
+combined.agg[combined.agg$Account=="SAVINGS","account_cmsm"] <- cumsum(combined.agg[combined.agg$Account=="SAVINGS","Amount"])
+
+combined.agg[combined.agg$Account=="LOAN A","account_cmsm"] <- cumsum(combined.agg[combined.agg$Account=="LOAN A","Amount"])
+combined.agg[combined.agg$Account=="LOAN B","account_cmsm"] <- cumsum(combined.agg[combined.agg$Account=="LOAN B","Amount"])
+combined.agg[combined.agg$Account=="LOAN C","account_cmsm"] <- cumsum(combined.agg[combined.agg$Account=="LOAN C","Amount"])
+combined.agg[combined.agg$Account=="LOAN D","account_cmsm"] <- cumsum(combined.agg[combined.agg$Account=="LOAN D","Amount"])
+combined.agg[combined.agg$Account=="LOAN E","account_cmsm"] <- cumsum(combined.agg[combined.agg$Account=="LOAN E","Amount"])
 
 combined.agg$net_worth <- cumsum(combined.agg$Amount)
+
+relevant.posterior <- combined.agg[combined.agg$Date >= '2020-02-01',]
 ```
 
-```{r viz}
-ggplot(combined.agg,aes(x=Date)) + geom_line(aes(color=Account,y=account_cmsm)) + geom_line(aes(y=net_worth))
+```{r posteriorViz}
+posterior.view <- ggplot(relevant.posterior,aes(x=Date)) + geom_line(aes(color=Account,y=account_cmsm)) + geom_line(aes(y=net_worth))
+```
+
+```{r anteriorViz}
+#combined.df.bkp <- combined.df
+combined.df <- combined.df.bkp
+
+#the assumption:networth increases by $47 per day
+#find recurring transactions by using the Memos!
+
+combined.df$cleaned_memo <- gsub("   ","",combined.df$Memo) %>% tolower()
+
+memo.table <- table(combined.df$cleaned_memo)
+
+#Takeout / Coffee
+combined.df[grepl("proper food",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: proper food"
+combined.df[grepl("panda express",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: panda express"
+combined.df[grepl("pizzazone",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: Pizza Zone"	
+combined.df[grepl("mcdonald's",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: McDonald's"	
+combined.df[grepl("jamba juice",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: Jamba Juice"	
+combined.df[grepl("in n out burger",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: In N Out"	
+combined.df[grepl("blue bottle coffee",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: Coffee"	
+combined.df[grepl("starbucks",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: Coffee"	
+combined.df[grepl("taqueria pancho vill",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: Pancho Villa"	
+combined.df[grepl("chipotle",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: Chipotle"	
+combined.df[grepl("lao table",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: Lao Table"	
+combined.df[grepl("hard knox cafe",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: Hard Knox"	
+combined.df[grepl("delivery.com",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: delivery.com"	
+combined.df[grepl("kfc/tb",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: kfc/tb"	
+combined.df[grepl("taco bell",combined.df$cleaned_memo),"memo_label"] <- "TAKEOUT: taco bell"	
+
+
+
+
+#Groceries
+combined.df[grepl("grocery",combined.df$cleaned_memo),"memo_label"] <- "GROCERY: misc. grocery"
+combined.df[grepl("safeway",combined.df$cleaned_memo),"memo_label"] <- "GROCERY: safeway"
+combined.df[grepl("walgreens",combined.df$cleaned_memo),"memo_label"] <- "GROCERY: walgreens"
+combined.df[grepl("trader joe's",combined.df$cleaned_memo),"memo_label"] <- "GROCERY: trader joe's"
+combined.df[grepl("rainbow grocery",combined.df$cleaned_memo),"memo_label"] <- "GROCERY: rainbow grocery"	
+combined.df[grepl("wholefds",combined.df$cleaned_memo),"memo_label"] <- "GROCERY: Whole Foods"
+combined.df[grepl("costco whse",combined.df$cleaned_memo),"memo_label"] <- "GROCERY: Costco"	
+combined.df[grepl("target",combined.df$cleaned_memo),"memo_label"] <- "GROCERY: Target"	
+combined.df[grepl("pacific market 2 sebastopol ca",combined.df$cleaned_memo),"memo_label"] <- "GROCERY: Sebastopol Market"	
+combined.df[grepl("andronico",combined.df$cleaned_memo),"memo_label"] <- "GROCERY: andronico"
+
+
+#Recurring Transactions
+combined.df[grepl("williams-sonoma direct dep",combined.df$cleaned_memo),"memo_label"] <- "RECURRING: direct deposit"
+combined.df[grepl("spotify",combined.df$cleaned_memo),"memo_label"] <- "RECURRING: spotify"
+combined.df[grepl("comcast",combined.df$cleaned_memo),"memo_label"] <- "RECURRING: internet"
+combined.df[grepl("gaetani",combined.df$cleaned_memo),"memo_label"] <- "RECURRING: rent"
+combined.df[grepl("24 hour fitness",combined.df$cleaned_memo),"memo_label"] <- "RECURRING: Gym"
+combined.df[grepl("dept education student",combined.df$cleaned_memo),"memo_label"] <- "RECURRING: Loan Payment"
+combined.df[grepl("hulu",combined.df$cleaned_memo),"memo_label"] <- "RECURRING: Hulu"	
+combined.df[grepl("pgande",combined.df$cleaned_memo),"memo_label"] <- "RECURRING: Utilities"	
+
+
+#Meta/Ignorable
+combined.df[grepl("redemption credit",combined.df$cleaned_memo),"memo_label"] <- "META: cc cashback"
+combined.df[grepl("payment thank you-mobile",combined.df$cleaned_memo),"memo_label"] <- "META: cc payment"
+combined.df[grepl("online transfer from chk",combined.df$cleaned_memo),"memo_label"] <- "META: transfer to savings"
+combined.df[grepl("non-chase atm withdraw",combined.df$cleaned_memo),"memo_label"] <- "META: atm withdrawal"
+combined.df[grepl("online transfer from sav",combined.df$cleaned_memo),"memo_label"] <- "META: withdrawal from savings"
+combined.df[grepl("online transfer to sav",combined.df$cleaned_memo),"memo_label"] <- "META: transfer to savings"
+combined.df[grepl("online transfer to chk",combined.df$cleaned_memo),"memo_label"] <- "META: transfer to checking"
+combined.df[grepl("initial conditions",combined.df$cleaned_memo),"memo_label"] <- "META:"
+combined.df[grepl("loan",combined.df$cleaned_memo),"memo_label"] <- "META:"	
+combined.df[grepl("online transfer from chk",combined.df$cleaned_memo),"memo_label"] <- "META: transfer to savings"
+combined.df[grepl("autosave safety net",combined.df$cleaned_memo),"memo_label"] <- "META: Autosave"
+combined.df[grepl("interest payment",combined.df$cleaned_memo),"memo_label"] <- "META: Interest Earned on Savings"	
+combined.df[grepl("caltrain",combined.df$cleaned_memo),"memo_label"] <- "META: Caltrain"
+combined.df[grepl("venmo",combined.df$cleaned_memo),"memo_label"] <- "META: Venmo"
+combined.df[grepl("dr. kurtbay optometry",combined.df$cleaned_memo),"memo_label"] <- "META: Eye Doctor"
+combined.df[grepl("cole hardware",combined.df$cleaned_memo),"memo_label"] <- "META: Hardware store"
+combined.df[grepl("atm withdrawal",combined.df$cleaned_memo),"memo_label"] <- "META: withdrawal at chase atm"
+combined.df[grepl("payment to chase card",combined.df$cleaned_memo),"memo_label"] <- "META: cc payment"
+combined.df[grepl("cash redemption",combined.df$cleaned_memo),"memo_label"] <- "META: cc cashback"
+
+
+#Bars
+combined.df[grepl("beaux",combined.df$cleaned_memo),"memo_label"] <- "Beaux"
+combined.df[grepl("dna lounge",combined.df$cleaned_memo),"memo_label"] <- "Misc Bar"
+combined.df[grepl("sf eagle ",combined.df$cleaned_memo),"memo_label"] <- "SF Eagle"
+combined.df[grepl("the old ship saloon ",combined.df$cleaned_memo),"memo_label"] <- "Misc Bar"
+combined.df[grepl("rickhouse",combined.df$cleaned_memo),"memo_label"] <- "Misc Bar"
+combined.df[grepl("blackbird bar",combined.df$cleaned_memo),"memo_label"] <- "Misc Bar"
+combined.df[grepl("moby dick",combined.df$cleaned_memo),"memo_label"] <- "Moby Dick"
+
+
+
+#Pay Attention to these
+combined.df[grepl("audible",combined.df$cleaned_memo),"memo_label"] <- "Audible"
+combined.df[grepl("munimobile-sfmta",combined.df$cleaned_memo),"memo_label"] <- "muni mobile"
+combined.df[grepl("nick's food san francisco ca",combined.df$cleaned_memo),"memo_label"] <- "liquor store by my house"
+combined.df[grepl("non-chase atm fee-with",combined.df$cleaned_memo),"memo_label"] <- "atm fee"
+combined.df[grepl("nintendo",combined.df$cleaned_memo),"memo_label"] <- "Nintendo subscription"
+combined.df[grepl("amzn",combined.df$cleaned_memo),"memo_label"] <- "amazon"
+combined.df[grepl("lyft",combined.df$cleaned_memo),"memo_label"] <- "Lyft"
+combined.df[grepl("prime video",combined.df$cleaned_memo),"memo_label"] <- "Prime Video"
+combined.df[grepl("stubhub",combined.df$cleaned_memo),"memo_label"] <- "Stub Hub"
+combined.df[grepl("taylormonroe",combined.df$cleaned_memo),"memo_label"] <- "Taylor/Monroe"
+
+
+unlabeled.memo <- combined.df[combined.df$memo_label %>% is.na(),]
+
+
+combined.df[combined.df$memo_label=="","memo_label"] <- "Other"
+
+
+combined.df$memo_category<-""
+combined.df[grepl("TAKEOUT",combined.df$memo_label),"memo_category"] <- "TAKEOUT"
+combined.df[grepl("GROCERY",combined.df$memo_label),"memo_category"] <- "GROCERY"
+combined.df[grepl("RECURRING",combined.df$memo_label),"memo_category"] <- "RECURRING"
+combined.df[grepl("META",combined.df$memo_label),"memo_category"] <- "META"
+combined.df[combined.df$memo_category=="","memo_category"] <- "ATTN"
+
+
+
+```
+
+```{r vizTransactions}
+memo.cat.sum <- combined.df %>% group_by(memo_category) %>% summarise(Amount=sum(Amount))
+memo.cat.percent <- (memo.cat.sum$Amount / (sum(memo.cat.sum$Amount %>% abs()))) %>% abs()
+
+memo.cat.avgs <- combined.df %>% group_by(memo_category) %>% summarise(Amount=mean(Amount))
+memo.cat.sd <- combined.df %>% group_by(memo_category) %>% summarise(Amount=sd(Amount))
+
+all.plot <- ggplot(combined.df,aes(x=Date,y=Amount,color=memo_category)) + geom_point()
+sans.recurring.plot <- ggplot(combined.df[combined.df$memo_category!="RECURRING" & combined.df$memo_category!="META",],aes(x=Date,y=Amount,color=memo_category)) + geom_point()
+
+negative.sans.recurring.plot <- ggplot(combined.df[combined.df$memo_category!="RECURRING" & combined.df$memo_category!="META" & combined.df$Amount < 0 ,],aes(x=Date,y=Amount,color=memo_category)) + geom_point()
+
+account.sd <- combined.df %>% group_by(memo_category) %>% summarise(Amount=sum(Amount))
+
+table(combined.df$memo_category)
+
+account.sd <- relevant.posterior %>% group_by(Account) %>% summarise(Amount=sd(Amount))
+```
+
+```{r future}
+#recurring.df <- combined.df[combined.df$memo_category=="RECURRING",]
+
+#lets say paychecks are 2025, 14 day seq starting 3/20 (every other friday)
+#spotify, $10 on the 7th of e/ month
+#utilites, $40 on the 6th of e/ month
+#gym $40 on the 17th of e/ month
+#hulu, $6 on the 18th of e/ month
+#rent on the 2nd of e/ month
+#internet, $40 on the 14th of e/ month
+
+#pay cc bill on the 7th
+
+#lets say $55 grocery per day. its a guess. even making this guess gives me anxiety but whatever
+
+#let loan payments be the variable we solve for
+
+#Initial conditions
+#we want: Date, Amount, Source, Account
+
+###some global variables for the prediction
+chk.balance <- 2468.28
+savings.balance <- 2577.78
+cc.bill <<- -1152.42
+
+loan.a.amt <- 0
+loan.b.amt <- 0
+loan.c.amt <- 0
+loan.d.amt <- 0
+loan.e.amt <- 0
+
+loan.a.total <- -5339.04 ; loan.a.interest.rate <- 0.0441 ; og.loan.a.min.payment <- 67.28
+loan.b.total <- -4746.18 ; loan.b.interest.rate <- 0.0404 ; og.loan.b.min.payment <- 56.57
+loan.c.total <- -1919.55 ; loan.c.interest.rate <- 0.0404 ; og.loan.c.min.payment <- 22.88
+loan.d.total <- -4726.68 ; loan.d.interest.rate <- 0.0351 ; og.loan.d.min.payment <- 55.17
+loan.e.total <- -1823.31 ; loan.e.interest.rate <- 0.0351 ; og.loan.e.min.payment <- 21.29
+
+og.min.payments <- c(og.loan.a.min.payment,og.loan.b.min.payment,og.loan.c.min.payment,og.loan.d.min.payment,og.loan.e.min.payment)
+
+end.of.coronavirus.forbearance <- '2020-09-30'
+date.of.last.loan.payment <- '2020-09-30' %>% as.Date() #bc coronavirus forbearance
+
+loan.minimum.payment <- 223.19
+
+loans.paid.off <- FALSE
+inital.paycheck.modular.timer <- ((Sys.Date() - as.Date('2020-04-17')) %>% as.numeric() %% 14)
+paycheck.modular.timer <- inital.paycheck.modular.timer
+
+current.date <- Sys.Date()
+
+chk.new.row <- list("Date"=current.date %>% as.character(),Amount=chk.balance,Account="CHECKING")
+sav.new.row <- list("Date"=current.date %>% as.character(),Amount=savings.balance,Account="SAVINGS")
+cred.new.row <- list("Date"=current.date %>% as.character(),Amount=cc.bill,Account="CREDIT")
+loan.a.new.row <- list("Date"=current.date %>% as.character(),Amount=loan.a.total,Account="LOAN A")
+loan.b.new.row <- list("Date"=current.date %>% as.character(),Amount=loan.b.total,Account="LOAN B")
+loan.c.new.row <- list("Date"=current.date %>% as.character(),Amount=loan.c.total,Account="LOAN C")
+loan.d.new.row <- list("Date"=current.date %>% as.character(),Amount=loan.d.total,Account="LOAN D")
+loan.e.new.row <- list("Date"=current.date %>% as.character(),Amount=loan.e.total,Account="LOAN E")
+
+initial.conditions.list <- list(chk.new.row,sav.new.row,cred.new.row,loan.a.new.row,loan.b.new.row,loan.c.new.row,loan.d.new.row,loan.e.new.row)
+initial.conditions.df <- as.data.frame(matrix(initial.conditions.list %>% unlist(),ncol=3,byrow=TRUE))
+names(initial.conditions.df) <- c("Date","Amount","Account")
+
+future.days.rows <- list()
+future.days.rows[[1]] <- initial.conditions.df
+for ( i in 0:(365*2.5)) {
+  current.date <- Sys.Date() + i
+  
+  # if (i == 159) {
+  #  break
+  # }
+
+  day.number <- substring(current.date,9,11)
+  
+  chk.amt <- 0
+  crd.amt <- -55
+  sav.amt <- 0
+  
+  loan.a.amt <- 0
+  loan.b.amt <- 0
+  loan.c.amt <- 0
+  loan.d.amt <- 0
+  loan.e.amt <- 0
+
+  
+  if (paycheck.modular.timer == 0) {
+    chk.amt <- chk.amt + 2025
+  }
+  
+  #day after paycheck, move to savings (conditions?)
+  if (paycheck.modular.timer == 1) {
+    if (chk.balance > 3000 & savings.balance < 3000) {
+      amt.to.xfer <- 3000 - savings.balance
+      chk.amt <- chk.amt - amt.to.xfer
+      sav.amt <- sav.amt + amt.to.xfer
+    }
+  }
+  
+  if (day.number == "02") {
+    #pay rent
+    chk.amt <- chk.amt - 1800
+  }
+  
+  if (day.number == "04") {
+    #pay loans
+    if (current.date > end.of.coronavirus.forbearance & sum(loan.a.total,loan.b.total,loan.c.total,loan.d.total,loan.e.total) < 0) { #once coronavirus forbearance is over
+      print(paste(current.date %>% as.character(),"; i =",i,"; calculating loan payments:"))
+      print(paste("Account Totals- checking:",chk.balance,"  savings:",savings.balance))
+      
+      #calculate interest from date of last payment (initialized as end of forbearance so thats taken care of)
+      days.since.last.payment <- current.date - date.of.last.loan.payment
+      
+      loan.a.interest <- min( (loan.a.total * loan.a.interest.rate) * (days.since.last.payment/365) %>% as.numeric(), 0)
+      loan.b.interest <- min( (loan.b.total * loan.b.interest.rate) * (days.since.last.payment/365) %>% as.numeric(), 0)
+      loan.c.interest <- min( (loan.c.total * loan.c.interest.rate) * (days.since.last.payment/365) %>% as.numeric(), 0)
+      loan.d.interest <- min( (loan.d.total * loan.d.interest.rate) * (days.since.last.payment/365) %>% as.numeric(), 0)
+      loan.e.interest <- min( (loan.e.total * loan.e.interest.rate) * (days.since.last.payment/365) %>% as.numeric(), 0)
+      
+      loan.a.min.payment <- min(og.loan.a.min.payment,-1*loan.a.total) 
+      loan.b.min.payment <- min(og.loan.b.min.payment,-1*loan.b.total) 
+      loan.c.min.payment <- min(og.loan.c.min.payment,-1*loan.c.total) 
+      loan.d.min.payment <- min(og.loan.d.min.payment,-1*loan.d.total) 
+      loan.e.min.payment <- min(og.loan.e.min.payment,-1*loan.e.total) 
+      
+      subtotal.toward.principal.a <- (-1*loan.a.min.payment) - loan.a.interest
+      subtotal.toward.principal.b <- (-1*loan.b.min.payment) - loan.b.interest
+      subtotal.toward.principal.c <- (-1*loan.c.min.payment) - loan.c.interest
+      subtotal.toward.principal.d <- (-1*loan.d.min.payment) - loan.d.interest
+      subtotal.toward.principal.e <- (-1*loan.e.min.payment) - loan.e.interest
+      
+      #toward principal
+      loan.payment.subtotal <- sum(subtotal.toward.principal.a,subtotal.toward.principal.b,subtotal.toward.principal.c,subtotal.toward.principal.d,subtotal.toward.principal.e)
+      
+      total.payment <- loan.payment.subtotal #will be modified conditionally later
+      
+      #if savings is above 3000, and checking is above 3000, then allocate rest to loans.
+      #NOTE this assumes credit card is always able to be paid in full. The cc payment can break these minimums
+      #NOTE this code assumes a payment is made every month and not paid ahead or missed
+      if (chk.balance >= 3000 & savings.balance >= 3000) {
+        potential.extra.toward.principal <- chk.balance - (total.payment*-1) - 3000
+        #print(paste("money available for loan payments ",potential.extra.toward.principal))
+        
+        #allocated to highest interest first. If a loan is paid off, just move on instead of adding more to a second loan.
+        loan.amts <- c(loan.a.total,loan.b.total,loan.c.total,loan.d.total,loan.e.total)
+        loan.interest.rates <- c(loan.a.interest.rate,loan.b.interest.rate,loan.c.interest.rate,loan.d.interest.rate,loan.e.interest.rate)
+        theoretical.interest <- loan.amts * loan.interest.rates
+        
+        #use the amount of interest that would accrue to decide which to pay
+        payment.decision <- which(theoretical.interest == min(theoretical.interest))
+        
+        extra.toward.principal <- min(potential.extra.toward.principal - og.min.payments[[payment.decision]], -1 * loan.amts[[payment.decision]])
+        
+        switch(payment.decision,
+               subtotal.toward.principal.a <- -1 * extra.toward.principal,
+               subtotal.toward.principal.b <- -1 * extra.toward.principal,
+               subtotal.toward.principal.c <- -1 * extra.toward.principal,
+               subtotal.toward.principal.d <- -1 * extra.toward.principal,
+               subtotal.toward.principal.e <- -1 * extra.toward.principal) #these numbers are negative for now
+        
+        #toward principal
+        total.payment <- sum(subtotal.toward.principal.a,subtotal.toward.principal.b,subtotal.toward.principal.c,subtotal.toward.principal.d,subtotal.toward.principal.e)
+      }
+      
+      
+      
+      chk.amt <- chk.amt + total.payment
+      
+      loan.a.amt <- subtotal.toward.principal.a * -1
+      loan.b.amt <- subtotal.toward.principal.b * -1
+      loan.c.amt <- subtotal.toward.principal.c * -1
+      loan.d.amt <- subtotal.toward.principal.d * -1
+      loan.e.amt <- subtotal.toward.principal.e * -1
+      
+      print(paste("Totals:",loan.a.total,loan.b.total,loan.c.total,loan.d.total,loan.e.total))
+      print(paste("Paying:",loan.a.amt,loan.b.amt,loan.d.amt,loan.d.amt,loan.e.amt))
+      
+      #interest was paid when the amount toward the principal was calculated
+      loan.a.total <<- loan.a.total - subtotal.toward.principal.a
+      loan.b.total <<- loan.b.total - subtotal.toward.principal.b
+      loan.c.total <<- loan.c.total - subtotal.toward.principal.c
+      loan.d.total <<- loan.d.total - subtotal.toward.principal.d
+      loan.e.total <<- loan.e.total - subtotal.toward.principal.e
+      
+      
+      print(paste("New Totals:",loan.a.total,loan.b.total,loan.c.total,loan.d.total,loan.e.total))
+    }
+  }
+  
+  
+  if (day.number == "06") {
+    #pay utilities
+    chk.amt <- chk.amt - 40
+  }
+  
+  if (day.number == "07") {
+    #pay spotify
+    chk.amt <- chk.amt - 10
+    
+    #pay c bill
+    chk.amt <- chk.amt + cc.bill
+    crd.amt <- cc.bill * -1
+  }
+  
+  if (day.number == "14") {
+    #pay internet
+    chk.amt <- chk.amt - 40
+  }
+  
+  if (day.number == "17") {
+    #pay gym
+    chk.amt <- chk.amt - 40
+  }
+  
+  if (day.number == "18") {
+    #pay hulu
+    chk.amt <- chk.amt - 6
+  }
+  
+  ###end of day calculations
+  #we want: Date, Amount, Account
+  chk.new.row <- list("Date"=current.date %>% as.character(),Amount=chk.amt,Account="CHECKING")
+  sav.new.row <- list("Date"=current.date %>% as.character(),Amount=sav.amt,Account="SAVINGS")
+  cred.new.row <- list("Date"=current.date %>% as.character(),Amount=crd.amt,Account="CREDIT")
+  loan.a.new.row <- list("Date"=current.date %>% as.character(),Amount=loan.a.amt,Account="LOAN A")
+  loan.b.new.row <- list("Date"=current.date %>% as.character(),Amount=loan.b.amt,Account="LOAN B")
+  loan.c.new.row <- list("Date"=current.date %>% as.character(),Amount=loan.c.amt,Account="LOAN C")
+  loan.d.new.row <- list("Date"=current.date %>% as.character(),Amount=loan.d.amt,Account="LOAN D")
+  loan.e.new.row <- list("Date"=current.date %>% as.character(),Amount=loan.e.amt,Account="LOAN E")
+  
+  new.day.list <- list(chk.new.row,sav.new.row,cred.new.row,loan.a.new.row,loan.b.new.row,loan.c.new.row,loan.d.new.row,loan.e.new.row)
+  new.day.df <- as.data.frame(matrix(new.day.list %>% unlist(),ncol=3,byrow=TRUE))
+  names(new.day.df) <- c("Date","Amount","Account")
+  
+  future.days.rows[[length(future.days.rows) + 1]] <- new.day.df
+  
+  cc.bill <<- cc.bill + crd.amt
+  chk.balance <<- chk.balance + chk.amt
+  savings.balance <<- savings.balance + sav.amt
+  
+  date.of.last.loan.payment <<- current.date
+  
+  paycheck.modular.timer <- (paycheck.modular.timer + 1) %% 14
+}
+
+future.rows <- rbindlist(future.days.rows)
+future.rows <- future.rows[order(future.rows$Date),]
+future.rows$Date <- future.rows$Date %>% as.character() %>% as.Date()
+future.rows$Amount <- future.rows$Amount %>% as.character() %>% as.numeric()
+future.rows$account_cmsm <- -1
+future.rows$account_cmsm <- NA
+
+future.rows[future.rows$Account=="CREDIT","account_cmsm"] <- cumsum(future.rows[future.rows$Account=="CREDIT","Amount"])
+future.rows[future.rows$Account=="CHECKING","account_cmsm"] <- cumsum(future.rows[future.rows$Account=="CHECKING","Amount"])
+future.rows[future.rows$Account=="SAVINGS","account_cmsm"] <- cumsum(future.rows[future.rows$Account=="SAVINGS","Amount"])
+future.rows[future.rows$Account=="LOAN A","account_cmsm"] <- cumsum(future.rows[future.rows$Account=="LOAN A","Amount"])
+future.rows[future.rows$Account=="LOAN B","account_cmsm"] <- cumsum(future.rows[future.rows$Account=="LOAN B","Amount"])
+future.rows[future.rows$Account=="LOAN C","account_cmsm"] <- cumsum(future.rows[future.rows$Account=="LOAN C","Amount"])
+future.rows[future.rows$Account=="LOAN D","account_cmsm"] <- cumsum(future.rows[future.rows$Account=="LOAN D","Amount"])
+future.rows[future.rows$Account=="LOAN E","account_cmsm"] <- cumsum(future.rows[future.rows$Account=="LOAN E","Amount"])
+
+future.rows$net_worth <- cumsum(future.rows$Amount)
+
+ggplot(future.rows,aes(x=Date,y=Amount,color=Account)) + geom_line()
+future.plot <- ggplot(future.rows,aes(x=Date,y=account_cmsm,color=Account)) + geom_line()
+```
+
+```{r plots}
+posterior.view
+future.plot
 ```

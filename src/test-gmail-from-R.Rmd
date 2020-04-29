@@ -1,0 +1,36 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(gmailr)
+library(magrittr)
+library(httr)
+```
+
+```{r softParams}
+
+api.key <- 'AIzaSyAtrS368wcb44dU9LVKPRYkG-fw_SthiKU'
+client.id <- '856541551922-nqobmblo263a0ob4qfeqlvuu8lur47lj.apps.googleusercontent.com'
+client.secret <- 'wa7OgoXRsfBq2n12k5qpmP3z'
+
+
+```
+
+my api key for gmail 
+
+serparate:
+client_id: 856541551922-nqobmblo263a0ob4qfeqlvuu8lur47lj.apps.googleusercontent.com
+client_secret: wa7OgoXRsfBq2n12k5qpmP3z
+
+
+
+```{r b1}
+
+google_app <- httr::oauth_app("home-listener",api.key,client.secret)
+gm_auth_configure(app = google_app)
+ 
+response <- gm_auth()
+
+```
